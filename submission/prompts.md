@@ -82,3 +82,43 @@ Công cụ: Copilot SDK trong VS Code
 **Kết quả AI:** Mở ảnh `000000001000.jpg` trong delivery `r2902`; ảnh có nhiều khuôn mặt nhìn rõ. Nguyễn Thanh Quang sau đó tự mở và xác nhận ảnh này. `security.md` ghi HOLD, báo người phụ trách và không sửa ảnh gốc.
 
 **Kiểm chứng:** Thành viên xác nhận đã tự xem ảnh. H16/H17 được kiểm tra trực tiếp trên file trace/security.
+
+---
+
+## 6. Thành viên C: Đối chiếu Detection ↔ Panoptic và công cụ Review
+
+Người dùng AI: Thành viên C (Phụ trách Cross-check, Candidates và Review Tool)
+
+**Prompt nguyên văn**
+
+> tôi sẽ làm trên nhánh này https://github.com/DragVN04/K5-L23-Day10-LeVietLong-2A202603043-Dataset-Release-Handover/tree/A-Cross-check
+> và tôi là người C
+> Phân công:
+> - Long (Leader): Tạo repo, seed chung, quản lý tiến độ, quyết định Release/Hold, lineage, handover v2, tích hợp và kiểm tra bài nộp.
+> - Bạn A: Validator lỗi detection/file (5 loại lỗi).
+> - Bạn B: Validator metadata và panoptic (4 loại lỗi), tích hợp validate.py.
+> - Bạn C: Đối chiếu detection ↔ panoptic, sinh candidates, làm công cụ xem ảnh và tổng hợp review_log.
+> - Bạn D: Truy vết ticket, trace.json, bảo mật, tài liệu và prompts.
+> giờ tôi cần làm gì để hoàn thành hướng dẫn tôi chi tiết nhé
+
+**Kết quả AI:**
+1. Xây dựng module `validator/cross_check.py` tuân thủ 100% chuẩn thư viện Python (không dùng thư viện ngoài trong validator):
+   - Quy đổi tọa độ YOLO normalized sang pixel coordinates.
+   - Ghép box detection với segment thing trong panoptic theo class name và tọa độ.
+   - Sử dụng greedy bipartite matching và tỷ lệ diện tích bao phủ (containment) để phát hiện 5 lỗi gán nhãn: `class_swap`, `category_swap`, `bbox_drift`, `missing_box`, `instance_merge`.
+   - Xuất file `candidates.json` và file mẫu `review_queue.csv`.
+2. Xây dựng công cụ review trực quan `tools/review_tool.py`:
+   - Dùng Pillow vẽ bounding box Detection (Xanh) và Panoptic (Cam) kèm nhãn lên ảnh.
+   - Tự động sinh `review_dashboard.html` để cả nhóm mở trên trình duyệt, có nút bấm gán verdict và bộ đếm ký tự đảm bảo ghi chú $\ge 20$ ký tự theo Rubric.
+   - Hỗ trợ chế độ CLI (`--cli`) để review bằng bàn phím siêu nhanh trong 40 phút thi đề ẩn.
+3. Chạy đo nhiễu trên lô sạch `runs/clean` (`--no-faults`): Thu được đúng **0 ứng viên**, chứng minh thuật toán không báo ảo.
+4. Chạy trên seed 2902: Sinh ra 24 ứng viên (16 ảnh). Cả nhóm tham gia mở ảnh review, xác nhận đúng 6 lỗi thật (`confirmed`) và 18 trường hợp lệch tự nhiên COCO (`rejected`).
+5. Xuất `candidates.json` và `review_log.csv` vào `submission/r2902/`.
+
+**Sai sót của AI và cách nhóm kiểm lại:**
+1. *Sai sót về missing_box:* Ban đầu AI kiểm tra `best_any` với toàn bộ detection boxes của ảnh. Với ảnh `000000023937` (đàn bò), một con bò bên cạnh có IoU 0.388 với segment con bò bị thiếu nhãn, khiến AI lọc nhầm và bỏ sót ca này.
+   *Khắc phục:* Nhóm đã chỉnh lại logic: chạy greedy bipartite matching trước, sau đó chỉ kiểm tra IoU với các box chưa được ghép (`unmatched_boxes`). Sau khi sửa, phát hiện chính xác 100% ca thiếu nhãn.
+2. *Sai sót về instance_merge:* Ban đầu AI chỉ dùng IoU bounding box đơn thuần (`IoU > 0.20`), dẫn tới sinh ra 177 candidates vì nhiều người đứng cạnh nhau trong COCO có box trùng nhau.
+   *Khắc phục:* Nhóm đã đổi sang kiểm tra tỷ lệ containment diện tích của từng box nằm trọn trong segment ($\ge 65\%$) kết hợp điều kiện số box > số segment của cùng lớp. Nhờ vậy danh sách ứng viên rút gọn xuống đúng 1 ca duy nhất (`000000015440`).
+3. Mọi kết luận gán nhãn trong `review_log.csv` đều do thành viên trực tiếp mở ảnh xem và đối chiếu, không để AI tự quyết định thay người.
+
