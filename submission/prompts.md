@@ -79,6 +79,6 @@ Công cụ: Copilot SDK trong VS Code
 >
 > Báo lại mình file nào đã hoàn thành và kết quả kiểm tra nhé.
 
-**Kết quả AI:** Mở ảnh `000000001000.jpg` trong delivery `r2902`; ảnh có nhiều khuôn mặt nhìn rõ. `security.md` ghi HOLD, báo người phụ trách và không sửa ảnh gốc.
+**Kết quả AI:** Mở ảnh `000000001000.jpg` trong delivery `r2902`; ảnh có nhiều khuôn mặt nhìn rõ. Nguyễn Thanh Quang sau đó tự mở và xác nhận ảnh này. `security.md` ghi HOLD, báo người phụ trách và không sửa ảnh gốc.
 
-**Giới hạn và kiểm chứng:** Quy định yêu cầu thành viên tự xem ảnh. Việc AI mở ảnh không xác nhận thay việc Nguyễn Thanh Quang tự xem; thành viên cần tự mở và xác nhận trước khi nộp. H16/H17 được kiểm tra trực tiếp trên file trace/security.
+**Kiểm chứng:** Thành viên xác nhận đã tự xem ảnh. H16/H17 được kiểm tra trực tiếp trên file trace/security.

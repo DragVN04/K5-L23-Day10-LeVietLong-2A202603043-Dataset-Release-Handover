@@ -16,4 +16,4 @@ Không tự ý sao chép dataset vào USB hoặc gửi dataset tới email cá n
 
 Trong tình huống này, dừng phát hành và đánh dấu lô **HOLD**, sau đó báo người phụ trách dataset hoặc đầu mối bảo mật. Không tự xóa hoặc làm mờ ảnh gốc vì có thể làm mất bằng chứng và ảnh hưởng tính toàn vẹn dữ liệu; chờ người có thẩm quyền quyết định cách xử lý.
 
-**Ảnh thực tế:** `000000001000.jpg` (trong manifest của lô). Ảnh có nhiều khuôn mặt nhìn rõ. Trạng thái lô: **HOLD**. Báo người phụ trách dataset hoặc đầu mối bảo mật; không tự làm mờ, xóa hoặc sửa ảnh gốc. Ảnh đã được AI mở để kiểm tra trực quan; thành viên nhóm vẫn cần tự mở và xác nhận trước khi merge để tuân thủ quy định xem ảnh của bài lab.
+**Ảnh thực tế:** `000000001000.jpg` (trong manifest của lô). Nguyễn Thanh Quang (2A202603083) đã tự mở và xác nhận ảnh có nhiều khuôn mặt nhìn rõ. Trạng thái lô: **HOLD**. Báo người phụ trách dataset hoặc đầu mối bảo mật; không tự làm mờ, xóa hoặc sửa ảnh gốc.
