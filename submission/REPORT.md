@@ -2,29 +2,26 @@
 
 ## 1. Số liệu luyện tập
 - Seed thống nhất hiện tại: `2902` (release v1: `lab250_9f8af853f974`).
-- F1 theo seed (rule / cross_check / overall):
-  * Nhóm lỗi gán nhãn (cross_check_review): Tìm được chính xác 6/6 lỗi gán nhãn sau khi nhóm trực tiếp review bằng mắt (gồm 1 class_swap, 1 category_swap, 1 bbox_drift, 2 missing_box, 1 instance_merge). Recall = 1.0, Precision = 1.0, F1 = 1.0 (trên 6 ca confirmed).
+- F1 chính thức: **chưa có**. Chưa có `errors.json` hoàn chỉnh và chưa chạy được quy trình chấm hợp lệ; số dòng `confirmed` trong review log không tự nó chứng minh đã tìm đủ lỗi hoặc xác nhận được F1.
 - Số ứng viên trên lô sạch (`--no-faults`) và hàng đợi trên seed:
-  * Lô sạch (`runs/clean` - 50 ảnh calib): **0 ứng viên**. Thành viên C đã hiệu chuẩn thuật toán Greedy Bipartite Matching và tỷ lệ diện tích bao phủ, loại bỏ hoàn toàn các trường hợp báo ảo trên tập dữ liệu COCO sạch.
-  * Hàng đợi trên seed 2902: **24 ứng viên** (thuộc 16 ảnh duy nhất). Hàng đợi nhỏ gọn, được chia đều cho 5 thành viên trong nhóm mở ảnh đối chiếu và hoàn tất đánh giá trong 10 phút.
-- Ngưỡng đã chọn và cách chọn (không dùng `_private`):
-  * IoU ghép lớp lệch (class_swap / category_swap): IoU >= 0.40 giữa detection box và panoptic thing segment.
-  * Instance merge: Segment thing có diện tích >= 1024 px, bao phủ >= 2 box detection cùng lớp với tỷ lệ containment >= 65%, và số box cùng lớp > số segment cùng lớp.
-  * BBox drift: Cặp cùng lớp có 0.35 <= IoU <= 0.78 và khoảng cách tâm lệch >= 8% đường chéo box.
-  * Missing box: Segment thing có diện tích >= 1000 px, diện tích tương đối >= 1% ảnh, không có box nào chưa ghép đạt IoU >= 0.40.
-  * Các ngưỡng này được nhóm tự kiểm chứng trên lô sạch `runs/clean` trước khi áp dụng vào lô luyện tập để đảm bảo độ chính xác.
+  * Lô sạch (`runs/clean` - 50 ảnh calib): **0 ứng viên** trong lần chạy kiểm tra. Đây chỉ là kết quả trên pool calib này, không chứng minh không có báo nhầm trên các lô khác.
+  * Seed 2902: **24 ứng viên thuộc 16 ảnh**, tái tạo được bằng `validator/cross_check.py`.
+- Ngưỡng triển khai hiện tại trong `validator/cross_check.py` (đối chiếu bằng bounding box):
+  * `class_swap` / `category_swap`: IoU giữa box detection và segment bbox >= 0.40.
+  * `instance_merge`: box detection cùng lớp có diện tích >= 400 px; có ít nhất 2 box nằm trong segment bbox với containment >= 65%; số box cùng lớp lớn hơn số segment cùng lớp; có ít nhất một cặp box trong nhóm containment có IoU < 0.40. Code hiện không áp dụng ngưỡng diện tích tối thiểu cho segment.
+  * `bbox_drift`: cặp cùng lớp được ghép một-đối-một nếu IoU > 0; ứng viên khi 0.35 <= IoU <= 0.78, tâm lệch >= 8% đường chéo box và box detection có diện tích chuẩn hóa >= 0.005 ảnh.
+  * `missing_box`: segment chưa ghép có `area` >= 1000 px và segment bbox chiếm >= 1% diện tích ảnh; không có box chưa ghép nào đạt IoU >= 0.40.
+- Giới hạn: cross-check và ảnh trực quan hóa hiện dùng bounding box từ annotation, chưa tính chồng lấp pixel của panoptic mask. Vì vậy candidates chỉ là hàng đợi nghi vấn; người review phải mở ảnh để quyết định.
 
 ## 2. Vì sao báo hết ứng viên làm F1 giảm?
 Ứng viên (`candidates.json`) sinh ra từ thuật toán đối chiếu chỉ là các trường hợp có nghi vấn bất đồng giữa Detection và Panoptic, **không đồng nghĩa tất cả đều là lỗi gán nhãn**.
 COCO có độ lệch tự nhiên giữa hai nguồn dữ liệu do:
 1. Ranh giới lớp mập mờ trong tự nhiên: ví dụ xe tải thùng lớn vs xe bus ở ảnh `000000006723`, chén trà nhỏ cup vs bowl ở `000000009590`, bánh kẹp xúc xích hot dog vs sandwich ở `000000009914`, lọ hoa vs chai lọ ở `000000020553`.
 2. Vật thể bị che khuất một phần ở viền ảnh hoặc bị vật thể khác che khuất trong phối cảnh đông đúc.
-
 **Kết quả phân tích từ thực nghiệm của nhóm trên seed 2902:**
-- Nếu tự động nộp toàn bộ 24 ứng viên vào `errors.json`, số False Positives (FP) sẽ tăng vọt từ 0 lên 18 ca.
-- Precision sẽ giảm mạnh từ 1.0 (6/6) xuống còn 0.25 (6/24).
-- Rank F1 sẽ tụt dốc từ 1.0 xuống dưới **0.40**!
-Do đó, quy trình bắt buộc là **cả nhóm cùng tham gia mở ảnh review bằng mắt**: Thành viên C (Toàn) và Leader Long review các ca nghi vấn class swap và instance merge; Thành viên D (Quang) và các bạn còn lại review missing box và bbox drift. Mỗi dòng ghi chú trong `review_log.csv` đều phản ánh đúng vật thể nhìn thấy trên ảnh thật (ví dụ xác nhận nhìn thấy rõ con bò, ly rượu vang, hoặc nhận diện 2 xe bus riêng biệt) để loại bỏ 18 ca lệch tự nhiên và giữ F1 ở mức tối ưu.
+- Review log hiện có 24 dòng: 6 `confirmed`, 18 `rejected`. Đây là số liệu review, không phải ground truth độc lập.
+- Minh họa có điều kiện: nếu giả sử 6 confirmed là toàn bộ lỗi thật và không có lỗi bị bỏ sót, nộp cả 24 ứng viên sẽ cho TP=6, FP=18, FN=0; precision=0.25, recall=1.0 và F1=0.40. Đây không phải F1 chính thức; nếu có lỗi bị bỏ sót, F1 thực tế sẽ thấp hơn.
+- Báo cáo nhóm ghi nhận việc chia người review theo nhóm loại lỗi. Tuy nhiên, `review_log.csv` hiện không có tên người review trong các ghi chú, nên chưa đủ bằng chứng trong file để đối chiếu người xem từng ca. Cần bổ sung đúng tên người thực sự review vào ghi chú trước khi nộp; không suy đoán hoặc tự gán tên.
 
 ## 3. Quyết định và lineage
 Lineage hiện ghi seed `2902` (`lab250_9f8af853f974`) và training run `R-021`. Chưa có `errors.json`, quyết định QC v1/HOLD, hay bản v2 để xác minh; không tự kết luận QC hoặc ghi nhận release. Nếu v1 bị HOLD, model R-021 cần được đánh giá lại hoặc huấn luyện lại vì sửa dataset không thay đổi dữ liệu model đã học.

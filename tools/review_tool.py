@@ -3,12 +3,12 @@
 
 Chức năng:
 1. Đọc candidates.json từ cross_check.py và thư mục delivery.
-2. Vẽ bounding box Detection (Xanh lá) và Panoptic BBox/Segment (Cam/Đỏ) lên ảnh.
+2. Vẽ bounding box Detection (Xanh lá) và bbox của segment panoptic (Cam) lên ảnh.
 3. Xuất ảnh đã vẽ vào thư mục visualized/ để mở xem nhanh trên máy.
 4. Tạo giao diện HTML standalone (review_dashboard.html) cho phép cả nhóm 5 người:
    - Xem ảnh phóng to, thấy rõ cả 2 nguồn nhãn.
-   - Nhập verdict (confirmed / rejected) và note (kiểm tra chuẩn >= 20 ký tự).
-   - Xuất / lưu trực tiếp vào review_log.csv theo chuẩn của Lab.
+   - Nhập tên reviewer, verdict (confirmed / rejected) và note (>= 20 ký tự).
+   - Tải review_log.csv; dashboard không ghi trực tiếp vào file trên máy.
 5. Cung cấp chế độ Interactive CLI (nhấn C: confirm, R: reject, S: skip) để review siêu tốc trong 40 phút đề ẩn.
 
 Tác giả: Bạn C (Nhóm Lab Day 10)
@@ -158,13 +158,6 @@ def generate_html_dashboard(
         cand_type = cand["type"]
         sug_note = cand.get("suggested_note", "")
 
-        # Mẫu ghi chú gợi ý chuẩn >= 20 ký tự
-        confirmed_note = sug_note
-        if len(confirmed_note) < 20:
-            confirmed_note = f"Xác nhận lỗi {cand_type}: nhãn không khớp quan sát thực tế trong ảnh"
-
-        rejected_note = f"Lệch tự nhiên COCO: vật thể bị che khuất hoặc góc khuất giữa hai nguồn nhãn"
-
         item_card = f"""
         <div class="card" id="card-{idx}">
             <div class="card-header">
@@ -183,8 +176,12 @@ def generate_html_dashboard(
                 <div class="review-panel">
                     <p class="suggestion">💡 <strong>Gợi ý:</strong> {sug_note}</p>
                     <div class="btn-group">
-                        <button type="button" class="btn btn-confirm" onclick="setVerdict({idx}, 'confirmed', '{confirmed_note}')">✅ Xác nhận LỖI (Confirmed)</button>
-                        <button type="button" class="btn btn-reject" onclick="setVerdict({idx}, 'rejected', '{rejected_note}')">❌ Lệch tự nhiên (Reject)</button>
+                        <button type="button" class="btn btn-confirm" onclick="setVerdict({idx}, 'confirmed')">✅ Xác nhận LỖI (Confirmed)</button>
+                        <button type="button" class="btn btn-reject" onclick="setVerdict({idx}, 'rejected')">❌ Lệch tự nhiên (Reject)</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Người trực tiếp review (bắt buộc):</label>
+                        <input id="reviewer-{idx}" type="text" placeholder="Tên thành viên đã mở và xem ảnh">
                     </div>
                     <div class="form-group">
                         <label>Trạng thái (Verdict):</label>
@@ -196,8 +193,8 @@ def generate_html_dashboard(
                     </div>
                     <div class="form-group">
                         <label>Ghi chú (Note - Yêu cầu ≥ 20 ký tự theo Rubric):</label>
-                        <textarea id="note-{idx}" rows="3" placeholder="Ghi chú chi tiết quan sát được gì trong ảnh..." oninput="updateRow({idx})">{sug_note}</textarea>
-                        <small id="char-count-{idx}" class="char-count">{len(sug_note)} ký tự</small>
+                        <textarea id="note-{idx}" rows="3" placeholder="Tự ghi điều quan sát được trong ảnh; không dùng nội dung gợi ý làm kết luận..." oninput="updateRow({idx})"></textarea>
+                        <small id="char-count-{idx}" class="char-count">0 ký tự</small>
                     </div>
                 </div>
             </div>
@@ -265,13 +262,9 @@ def generate_html_dashboard(
     <script>
         const candidates = {json.dumps(candidates, ensure_ascii=False)};
 
-        function setVerdict(idx, verdict, note) {{
+        function setVerdict(idx, verdict) {{
             const vSelect = document.getElementById('verdict-' + idx);
-            const nText = document.getElementById('note-' + idx);
             vSelect.value = verdict;
-            if (note) {{
-                nText.value = note;
-            }}
             updateRow(idx);
         }}
 
@@ -284,14 +277,32 @@ def generate_html_dashboard(
         }}
 
         function exportCSV() {{
-            let csv = "image,type,verdict,note\\n";
-            candidates.forEach((c, idx) => {{
+            const rows = ["image,type,verdict,note"];
+            for (let idx = 0; idx < candidates.length; idx++) {{
+                const c = candidates[idx];
                 const v = document.getElementById('verdict-' + idx).value;
-                const n = document.getElementById('note-' + idx).value.replace(/"/g, '""');
-                if (v) {{
-                    csv += `"${{c.image}}","${{c.type}}","${{v}}","${{n}}"\\n`;
+                const reviewer = document.getElementById('reviewer-' + idx).value.trim();
+                const n = document.getElementById('note-' + idx).value.trim();
+                if (!v) {{
+                    continue;
                 }}
-            }});
+                if (!reviewer) {{
+                    alert(`Nhập tên người đã review ảnh ${{c.image}} trước khi xuất.`);
+                    return;
+                }}
+                if (n.length < 20) {{
+                    alert(`Ghi chú cho ảnh ${{c.image}} phải có ít nhất 20 ký tự.`);
+                    return;
+                }}
+                const note = `Người review: ${{reviewer}}. ${{n}}`;
+                const quote = value => '"' + String(value).replace(/"/g, '""') + '"';
+                rows.push([c.image, c.type, v, note].map(quote).join(","));
+            }}
+            if (rows.length === 1) {{
+                alert("Chưa có ứng viên nào được review.");
+                return;
+            }}
+            const csv = rows.join("\\r\\n") + "\\r\\n";
             const blob = new Blob([csv], {{ type: 'text/csv;charset=utf-8;' }});
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
@@ -322,21 +333,29 @@ def run_cli_review(candidates: list[dict], out_csv: Path) -> None:
         choice = input("   Lựa chọn ([c]onfirm/[r]eject/[s]kip) [mặc định: c]: ").strip().lower() or "c"
 
         if choice == "c":
-            default_note = c.get("suggested_note", "")
-            if len(default_note) < 20:
-                default_note = f"Xác nhận lỗi {c['type']}: phát hiện sai lệch rõ rệt so với thực tế"
-            user_note = input(f"   Ghi chú (nhấn Enter để dùng mặc định: '{default_note}'): ").strip()
-            note = user_note if user_note else default_note
-            reviews.append({"image": c["image"], "type": c["type"], "verdict": "confirmed", "note": note})
-            print(f"   -> Đã ghi: confirmed ({len(note)} ký tự)")
+            verdict = "confirmed"
         elif choice == "r":
-            default_note = "Lệch tự nhiên COCO: khác biệt góc khuất hoặc che khuất tự nhiên giữa hai nguồn"
-            user_note = input(f"   Lý do reject (nhấn Enter để dùng mặc định: '{default_note}'): ").strip()
-            note = user_note if user_note else default_note
-            reviews.append({"image": c["image"], "type": c["type"], "verdict": "rejected", "note": note})
-            print(f"   -> Đã ghi: rejected ({len(note)} ký tự)")
+            verdict = "rejected"
         else:
             print("   -> Đã bỏ qua.")
+            print("-" * 50)
+            continue
+
+        reviewer = ""
+        while not reviewer:
+            reviewer = input("   Tên người trực tiếp xem ảnh: ").strip()
+            if not reviewer:
+                print("   Cần ghi tên người đã thực sự review ảnh.")
+
+        note = ""
+        while len(note) < 20:
+            note = input("   Ghi chú quan sát cụ thể (ít nhất 20 ký tự): ").strip()
+            if len(note) < 20:
+                print("   Ghi chú chưa đủ 20 ký tự; hãy bổ sung bằng chứng quan sát.")
+
+        full_note = f"Người review: {reviewer}. {note}"
+        reviews.append({"image": c["image"], "type": c["type"], "verdict": verdict, "note": full_note})
+        print(f"   -> Đã ghi: {verdict} ({len(note)} ký tự ghi chú)")
         print("-" * 50)
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)

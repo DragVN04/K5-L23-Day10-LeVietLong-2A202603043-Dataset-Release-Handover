@@ -1,6 +1,6 @@
 # Nhật ký sử dụng AI
 
-Nhóm ghi lại đầy đủ và minh bạch các lần tham khảo công cụ AI (Copilot / Assistant), phản ánh đúng bản chất AI chỉ đóng vai trò hỗ trợ tra cứu cú pháp và công thức toán học; logic nghiệp vụ, thuật toán ghép cặp, gỡ lỗi và toàn bộ khâu xem ảnh kiểm tra chất lượng đều do các thành viên trực tiếp thực hiện.
+Nhật ký này ghi lại các prompt và hỗ trợ AI được lưu cho những phần việc bên dưới. AI được dùng không chỉ để tra cứu công thức/cú pháp mà còn đưa ra gợi ý lập trình và thuật toán; thành viên chịu trách nhiệm rà soát, chỉnh sửa và kiểm chứng phần mình nộp. Các ghi chú gỡ lỗi hồi cứu được ghi rõ là tóm tắt, không phải prompt nguyên văn nếu không có nội dung prompt gốc. AI không được dùng để quyết định verdict thay người review.
 
 ---
 
@@ -64,16 +64,16 @@ Công cụ: Copilot SDK trong VS Code
 
 ## Phần B: Thành viên C — Đối chiếu Detection ↔ Panoptic và Công cụ Review
 Người thực hiện: Trịnh Xuân Toàn (2A202603121)  
-Công cụ: AI Assistant (hỗ trợ công thức tính toán và tra cứu hàm chuẩn)
+Hỗ trợ AI được ghi lại: công thức, API và gợi ý thuật toán; thành viên kiểm tra kết quả trước khi dùng.
 
 ### 1. Tra cứu công thức chuyển đổi tọa độ và tính IoU bằng thư viện chuẩn
-**Mục đích:** Thành viên tự viết module `validator/cross_check.py` tuân thủ nguyên tắc không dùng thư viện ngoài (chỉ dùng thư viện chuẩn `math`, `json`, `sys`, `pathlib`).
+**Mục đích:** Xây dựng module `validator/cross_check.py` tuân thủ nguyên tắc validator chỉ dùng thư viện chuẩn (`math`, `json`, `sys`, `pathlib`).
 
 **Prompt nguyên văn:**
 > Viết giúp tôi một hàm Python thuần (chỉ dùng math/thư viện chuẩn) tính IoU giữa 2 bounding box dạng [x, y, w, h] tọa độ pixel, và công thức đổi từ nhãn YOLO normalized (xc, yc, w, h) sang pixel [x_min, y_min, w_px, h_px] khi biết width, height ảnh.
 
-**Kết quả AI:** Cung cấp hàm `calculate_iou(box_a, box_b)` và công thức chuyển đổi `x_min = (xc - w/2) * width`.  
-**Thành viên kiểm chứng và tích hợp:** Trịnh Xuân Toàn tự tích hợp vào cấu trúc đọc `labels/*.txt` và `panoptic.json`, xử lý các trường hợp ngoại lệ (tọa độ tràn mép, chia cho 0 khi union <= 0).
+**Kết quả AI:** Cung cấp code mẫu cho hàm `calculate_iou(box_a, box_b)` và công thức chuyển đổi `x_min = (xc - w/2) * width`.
+**Phần việc của thành viên:** Trịnh Xuân Toàn chịu trách nhiệm tích hợp và kiểm tra phần đọc `labels/*.txt` và `panoptic.json`, cũng như rà soát trường hợp union không dương. Module có các heuristic do nhóm lựa chọn và triển khai; không nên hiểu prompt tra cứu này là bằng chứng AI không tham gia gợi ý lập trình khác.
 
 ### 2. Tra cứu cú pháp Pillow để vẽ bounding box trực quan
 **Mục đích:** Xây dựng công cụ xem ảnh `tools/review_tool.py` phục vụ cả nhóm mở ảnh review nhanh.
@@ -81,25 +81,24 @@ Công cụ: AI Assistant (hỗ trợ công thức tính toán và tra cứu hàm
 **Prompt nguyên văn:**
 > Tôi dùng thư viện Pillow để vẽ các bounding box detection (màu xanh lá) và segment panoptic (màu cam) lên ảnh JPG, ghi nhãn text phía trên box. Cho tôi cú pháp chuẩn của ImageDraw.Draw và draw.rectangle, draw.text.
 
-**Kết quả AI:** Cung cấp đoạn code mẫu sử dụng `ImageDraw.Draw(im).rectangle` và `draw.text`.  
-**Thành viên kiểm chứng và phát triển:** Trịnh Xuân Toàn tự thiết kế toàn bộ logic đọc dữ liệu, xuất ảnh phân giải cao vào `visualized/`, và lập trình trang HTML dashboard độc lập (`review_dashboard.html`) có bộ đếm ký tự để đảm bảo ghi chú review $\ge 20$ ký tự theo yêu cầu Rubric.
+**Kết quả AI:** Cung cấp code mẫu sử dụng `ImageDraw.Draw(im).rectangle` và `draw.text`.
+**Phần việc của thành viên:** Trịnh Xuân Toàn tích hợp công cụ đọc dữ liệu, xuất ảnh vào `visualized/` và dashboard HTML (`review_dashboard.html`); AI hỗ trợ bằng ví dụ API nêu trên. Code hiện trực quan hóa box của detection và bbox của segment panoptic, chưa vẽ contour pixel của mask.
 
-### 3. Sai sót của AI và Quá trình Thành viên Tự Gỡ Lỗi (Debugging)
+### 3. Gợi ý AI và các lần thử/điều chỉnh thuật toán
 
-Trong quá trình phát triển thuật toán lọc ứng viên, AI đưa ra các gợi ý sai lầm nhưng đã được Thành viên C phát hiện và tự tay khắc phục:
+Hai mục dưới đây là tóm tắt hồi cứu quá trình thử nghiệm, không phải prompt nguyên văn. Chỉ giữ các chi tiết về lần thử và số lượng ứng viên nếu thành viên có thể xác nhận chúng từ lịch sử làm việc của nhóm.
 
-1. **AI lọc sai làm bỏ sót `missing_box` (Ảnh `000000023937`):**
-   - *Gợi ý của AI:* AI đề xuất kiểm tra nếu một segment panoptic có IoU với *bất kỳ* box nào trong ảnh $> 0.35$ thì coi là đã có box.
+Trong quá trình phát triển bộ lọc candidates, nhóm đã xem xét các gợi ý thuật toán và điều chỉnh dựa trên kết quả chạy/review:
+
+1. **Xử lý ca `missing_box` ở ảnh `000000023937`:**
+   - *Gợi ý ban đầu được ghi nhận:* kiểm tra một segment panoptic với bất kỳ box nào trong ảnh bằng ngưỡng IoU.
    - *Lỗi thực tế:* Trên ảnh `000000023937` (đàn bò trên đồng cỏ), có một con bò bị thiếu box detection. Tuy nhiên, con bò bên cạnh đã được gán box và box đó vô tình giao với segment con bò này với IoU 0.388. Logic của AI khiến ca này bị bỏ qua (False Negative).
-   - *Cách thành viên tự khắc phục:* Toàn đã loại bỏ gợi ý của AI, tự thiết kế thuật toán **Greedy Bipartite Matching** (ghép 1-đối-1 giữa box và segment cùng lớp theo IoU giảm dần). Sau khi ghép, chỉ kiểm tra các box *chưa được ghép* (`unmatched_boxes`). Nhờ đó phát hiện chính xác 100% ca thiếu nhãn này.
+   - *Điều chỉnh:* Toàn dùng ghép một-đối-một theo IoU giảm dần và chỉ xét các đối tượng chưa ghép cho bước tiếp theo. Bản hiện tại bỏ qua cặp có IoU bằng 0. Trên seed đang kiểm tra, module phát ra candidate cho ảnh này; không khẳng định đây là độ chính xác 100% trên các lô khác.
 
-2. **AI dùng tiêu chí IoU thô làm bùng nổ 177 ứng viên giả (`instance_merge`):**
-   - *Gợi ý của AI:* AI đề xuất coi mọi segment có IoU $> 0.20$ với 2 box detection cùng lớp là `instance_merge`.
-   - *Lỗi thực tế:* Trong ảnh COCO, nhiều người hoặc đồ vật đứng sát nhau thường có bounding box chồng lấn tự nhiên. Tiêu chí của AI tạo ra 177 ứng viên rác, khiến việc xem mắt thủ công bị quá tải.
-   - *Cách thành viên tự khắc phục:* Toàn đã đổi sang kiểm tra **tỷ lệ containment diện tích**: chỉ coi là merge khi từng box detection nằm lọt trong segment $\ge 65\%$ diện tích của box đó, đồng thời số box detection cùng lớp phải lớn hơn số segment panoptic cùng lớp. Danh sách ứng viên rút gọn xuống đúng 1 ca thật sự (`000000015440` - 2 xe bus).
+2. **Lọc candidate `instance_merge`:**
+   - *Gợi ý ban đầu được ghi nhận:* dùng ngưỡng IoU thô để phát hiện nhiều box cùng lớp trong một segment.
+   - *Điều chỉnh được triển khai:* dùng tỷ lệ containment của box trong segment bbox (>=65%), yêu cầu tối thiểu hai box và so sánh số box với số segment cùng lớp. Candidate seed 2902 có một dòng `instance_merge` cho ảnh `000000015440`.
 
-3. **Toàn bộ kết luận review là quyết định của con người:**
-   - AI không tham gia vào việc phán quyết đúng/sai của nhãn.
-   - Cả nhóm (Toàn, Long, Quang và các thành viên) đã trực tiếp mở ảnh qua `review_dashboard.html`, đối chiếu bằng mắt giữa vật thể thực tế với nhãn và tự tay nhập toàn bộ 24 dòng ghi chú trong `review_log.csv`.
-
-
+3. **Quyết định review:**
+   - Verdict phải do thành viên trực tiếp mở ảnh và quyết định; AI không được dùng để phán quyết đúng/sai của nhãn.
+   - Hai file review hiện có 24 dòng (6 `confirmed`, 18 `rejected`). Format hiện tại chưa ghi tên reviewer trong từng dòng. Trước khi nộp, nhóm cần bổ sung tên đúng của người đã xem vào ghi chú từng ca theo RULES; không suy đoán hoặc tự gán reviewer sau sự việc.
