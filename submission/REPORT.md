@@ -2,12 +2,26 @@
 
 ## 1. Số liệu luyện tập
 - Seed thống nhất hiện tại: `2902` (release v1: `lab250_9f8af853f974`).
-- F1 theo seed (rule / cross_check / overall): Chưa có; validator và `errors.json` chưa được cung cấp trong workspace.
-- Số ứng viên trên lô sạch (`--no-faults`) và hàng đợi trên seed: Chưa có số liệu kiểm chứng.
-- Ngưỡng đã chọn và cách chọn (không dùng `_private`): Nhóm cần ghi sau khi chạy validator trên lô sạch và tự review hàng đợi. Không đọc hoặc dò `_private`.
+- F1 chính thức: **chưa có**. Chưa có `errors.json` hoàn chỉnh và chưa chạy được quy trình chấm hợp lệ; số dòng `confirmed` trong review log không tự nó chứng minh đã tìm đủ lỗi hoặc xác nhận được F1.
+- Số ứng viên trên lô sạch (`--no-faults`) và hàng đợi trên seed:
+  * Lô sạch (`runs/clean` - 50 ảnh calib): **0 ứng viên** trong lần chạy kiểm tra. Đây chỉ là kết quả trên pool calib này, không chứng minh không có báo nhầm trên các lô khác.
+  * Seed 2902: **24 ứng viên thuộc 16 ảnh**, tái tạo được bằng `validator/cross_check.py`.
+- Ngưỡng triển khai hiện tại trong `validator/cross_check.py` (đối chiếu bằng bounding box):
+  * `class_swap` / `category_swap`: IoU giữa box detection và segment bbox >= 0.40.
+  * `instance_merge`: box detection cùng lớp có diện tích >= 400 px; có ít nhất 2 box nằm trong segment bbox với containment >= 65%; số box cùng lớp lớn hơn số segment cùng lớp; có ít nhất một cặp box trong nhóm containment có IoU < 0.40. Code hiện không áp dụng ngưỡng diện tích tối thiểu cho segment.
+  * `bbox_drift`: cặp cùng lớp được ghép một-đối-một nếu IoU > 0; ứng viên khi 0.35 <= IoU <= 0.78, tâm lệch >= 8% đường chéo box và box detection có diện tích chuẩn hóa >= 0.005 ảnh.
+  * `missing_box`: segment chưa ghép có `area` >= 1000 px và segment bbox chiếm >= 1% diện tích ảnh; không có box chưa ghép nào đạt IoU >= 0.40.
+- Giới hạn: cross-check và ảnh trực quan hóa hiện dùng bounding box từ annotation, chưa tính chồng lấp pixel của panoptic mask. Vì vậy candidates chỉ là hàng đợi nghi vấn; người review phải mở ảnh để quyết định.
 
 ## 2. Vì sao báo hết ứng viên làm F1 giảm?
-Ứng viên là các trường hợp nghi ngờ, không đồng nghĩa tất cả đều sai nhãn. COCO có thể có khác biệt tự nhiên giữa detection và panoptic do che khuất, crowd hoặc khác biệt vùng bao. Đưa mọi ứng viên vào kết quả làm tăng false positive, giảm precision và do đó có thể giảm F1. Cần bổ sung số liệu precision/recall/F1 của nhóm sau khi review; hiện chưa có `errors.json` để báo số cụ thể.
+Ứng viên (`candidates.json`) sinh ra từ thuật toán đối chiếu chỉ là các trường hợp có nghi vấn bất đồng giữa Detection và Panoptic, **không đồng nghĩa tất cả đều là lỗi gán nhãn**.
+COCO có độ lệch tự nhiên giữa hai nguồn dữ liệu do:
+1. Ranh giới lớp mập mờ trong tự nhiên: ví dụ xe tải thùng lớn vs xe bus ở ảnh `000000006723`, chén trà nhỏ cup vs bowl ở `000000009590`, bánh kẹp xúc xích hot dog vs sandwich ở `000000009914`, lọ hoa vs chai lọ ở `000000020553`.
+2. Vật thể bị che khuất một phần ở viền ảnh hoặc bị vật thể khác che khuất trong phối cảnh đông đúc.
+**Kết quả phân tích từ thực nghiệm của nhóm trên seed 2902:**
+- Review log hiện có 24 dòng: 6 `confirmed`, 18 `rejected`. Đây là số liệu review, không phải ground truth độc lập.
+- Minh họa có điều kiện: nếu giả sử 6 confirmed là toàn bộ lỗi thật và không có lỗi bị bỏ sót, nộp cả 24 ứng viên sẽ cho TP=6, FP=18, FN=0; precision=0.25, recall=1.0 và F1=0.40. Đây không phải F1 chính thức; nếu có lỗi bị bỏ sót, F1 thực tế sẽ thấp hơn.
+- Báo cáo nhóm ghi nhận việc chia người review theo nhóm loại lỗi. Tuy nhiên, `review_log.csv` hiện không có tên người review trong các ghi chú, nên chưa đủ bằng chứng trong file để đối chiếu người xem từng ca. Cần bổ sung đúng tên người thực sự review vào ghi chú trước khi nộp; không suy đoán hoặc tự gán tên.
 
 ## 3. Quyết định và lineage
 Lineage hiện ghi seed `2902` (`lab250_9f8af853f974`) và training run `R-021`. Chưa có `errors.json`, quyết định QC v1/HOLD, hay bản v2 để xác minh; không tự kết luận QC hoặc ghi nhận release. Nếu v1 bị HOLD, model R-021 cần được đánh giá lại hoặc huấn luyện lại vì sửa dataset không thay đổi dữ liệu model đã học.
