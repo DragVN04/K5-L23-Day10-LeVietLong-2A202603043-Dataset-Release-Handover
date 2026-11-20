@@ -47,6 +47,36 @@ def calculate_box_intersection(box_a: tuple[float, float, float, float], box_b: 
     return ix * iy
 
 
+def greedy_match_boxes(boxes: list[dict], segments: list[dict]) -> list[tuple[float, int, int]]:
+    """Ghép box với segment cùng lớp theo IoU giảm dần, bỏ các cặp không giao nhau."""
+    pairs = []
+    for segment_index, segment in enumerate(segments):
+        for box_index, box in enumerate(boxes):
+            iou = calculate_iou(box["bbox"], tuple(segment["bbox"]))
+            if iou > 0.0:
+                pairs.append((iou, segment_index, box_index))
+    pairs.sort(reverse=True, key=lambda pair: pair[0])
+
+    matched_segments = set()
+    matched_boxes = set()
+    matches = []
+    for iou, segment_index, box_index in pairs:
+        if segment_index in matched_segments or box_index in matched_boxes:
+            continue
+        matched_segments.add(segment_index)
+        matched_boxes.add(box_index)
+        matches.append((iou, segment_index, box_index))
+    return matches
+
+
+def has_distinct_box_pair(boxes: list[dict], max_iou: float = 0.40) -> bool:
+    return any(
+        calculate_iou(box_a["bbox"], box_b["bbox"]) < max_iou
+        for index, box_a in enumerate(boxes)
+        for box_b in boxes[index + 1 :]
+    )
+
+
 def load_classes(delivery_dir: Path) -> list[str]:
     """Đọc danh sách lớp từ classes.txt trong delivery."""
     classes_file = delivery_dir / "classes.txt"
@@ -188,12 +218,7 @@ def generate_candidates(delivery_dir: Path) -> list[dict]:
                     if b_area > 0 and (inter / b_area) >= 0.65:
                         contained_boxes.append(b)
                 if len(contained_boxes) >= 2:
-                    # Kiểm tra 2 box này thực sự là 2 cá thể riêng biệt (không trùng nhau)
-                    b1, b2 = contained_boxes[0], contained_boxes[1]
-                    inter_b = calculate_box_intersection(b1["bbox"], b2["bbox"])
-                    union_b = (b1["bbox"][2] * b1["bbox"][3]) + (b2["bbox"][2] * b2["bbox"][3]) - inter_b
-                    iou_b = inter_b / (union_b + 1e-6)
-                    if iou_b < 0.40:
+                    if has_distinct_box_pair(contained_boxes):
                         candidates.append({
                             "image": stem,
                             "type": "instance_merge",
@@ -210,44 +235,34 @@ def generate_candidates(delivery_dir: Path) -> list[dict]:
             c_segs = [s for s in segs if cat_by_id[s["category_id"]]["name"] == cat_name]
             c_boxes = [b for b in boxes if b["cname"] == cat_name]
 
-            # Xếp các cặp (seg, box) theo IoU giảm dần
-            pairs = []
-            for s_idx, s in enumerate(c_segs):
-                for b_idx, b in enumerate(c_boxes):
-                    sc = calculate_iou(b["bbox"], tuple(s["bbox"]))
-                    pairs.append((sc, s_idx, b_idx))
-            pairs.sort(reverse=True, key=lambda x: x[0])
+            matches = greedy_match_boxes(c_boxes, c_segs)
+            matched_segs = {segment_index for _, segment_index, _ in matches}
+            matched_boxes_indices = {box_index for _, _, box_index in matches}
 
-            matched_segs = set()
-            matched_boxes_indices = set()
+            for sc, s_idx, b_idx in matches:
+                s = c_segs[s_idx]
+                b = c_boxes[b_idx]
 
-            for sc, s_idx, b_idx in pairs:
-                if s_idx not in matched_segs and b_idx not in matched_boxes_indices:
-                    matched_segs.add(s_idx)
-                    matched_boxes_indices.add(b_idx)
-                    s = c_segs[s_idx]
-                    b = c_boxes[b_idx]
+                # Kiểm tra bbox_drift
+                if b["norm_area"] >= 0.005:
+                    bx_c = b["bbox"][0] + b["bbox"][2] / 2.0
+                    by_c = b["bbox"][1] + b["bbox"][3] / 2.0
+                    sx_c = s["bbox"][0] + s["bbox"][2] / 2.0
+                    sy_c = s["bbox"][1] + s["bbox"][3] / 2.0
+                    b_diag = math.sqrt(b["bbox"][2] ** 2 + b["bbox"][3] ** 2)
+                    c_dist = math.sqrt((bx_c - sx_c) ** 2 + (by_c - sy_c) ** 2)
+                    drift_ratio = c_dist / (b_diag + 1e-6)
 
-                    # Kiểm tra bbox_drift
-                    if b["norm_area"] >= 0.005:
-                        bx_c = b["bbox"][0] + b["bbox"][2] / 2.0
-                        by_c = b["bbox"][1] + b["bbox"][3] / 2.0
-                        sx_c = s["bbox"][0] + s["bbox"][2] / 2.0
-                        sy_c = s["bbox"][1] + s["bbox"][3] / 2.0
-                        b_diag = math.sqrt(b["bbox"][2] ** 2 + b["bbox"][3] ** 2)
-                        c_dist = math.sqrt((bx_c - sx_c) ** 2 + (by_c - sy_c) ** 2)
-                        drift_ratio = c_dist / (b_diag + 1e-6)
-
-                        # IoU giảm đáng kể hoặc tâm bị dịch chuyển
-                        if 0.35 <= sc <= 0.78 and drift_ratio >= 0.08:
-                            candidates.append({
-                                "image": stem,
-                                "type": "bbox_drift",
-                                "class": cat_name,
-                                "iou": round(sc, 3),
-                                "drift_ratio": round(drift_ratio, 3),
-                                "suggested_note": f"Box detection {cat_name} bị lệch tâm {drift_ratio*100:.1f}%, IoU đạt {sc:.2f}"
-                            })
+                    # IoU giảm đáng kể hoặc tâm bị dịch chuyển
+                    if 0.35 <= sc <= 0.78 and drift_ratio >= 0.08:
+                        candidates.append({
+                            "image": stem,
+                            "type": "bbox_drift",
+                            "class": cat_name,
+                            "iou": round(sc, 3),
+                            "drift_ratio": round(drift_ratio, 3),
+                            "suggested_note": f"Box detection {cat_name} bị lệch tâm {drift_ratio*100:.1f}%, IoU đạt {sc:.2f}"
+                        })
 
             # Danh sách các box chưa được ghép với segment nào
             matched_box_ids = {id(c_boxes[idx]) for idx in matched_boxes_indices}
